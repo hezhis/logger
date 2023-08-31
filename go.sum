@@ -1,0 +1,9 @@
+github.com/995933447/simpletrace v0.0.0-20230217061256-c25a914bd376 h1:hIHav2TTYiAGn87d9CGiuuty5cT/YBOb5Uxs52FoDgs=
+github.com/995933447/simpletrace v0.0.0-20230217061256-c25a914bd376/go.mod h1:Kh2+nE3eCIOSIwSo8Sxj/MbWt1KPMJJz+9SHptuYr6s=
+github.com/995933447/stringhelper-go v0.0.0-20221220072216-628db3bc29d8 h1:q37SO0GTj/dk35jov187h3CACffZle6KjVzgGOrLkBM=
+github.com/995933447/stringhelper-go v0.0.0-20221220072216-628db3bc29d8/go.mod h1:cwkwj1/zndmaLbRYgQqy6qwY/ITAiEMdR+1BGssgXik=
+github.com/gzjjyz/trace v0.0.0-20230831064247-64e42e91ac5d h1:PTnoIySa/HfBhvpT+S0AehoMGpiT+BTQF+xomG1ypkQ=
+github.com/gzjjyz/trace v0.0.0-20230831064247-64e42e91ac5d/go.mod h1:FOo0hrIPxyN2/x/MYlMKng+N+Wh+HehilHVHugYpNH4=
+github.com/petermattis/goid v0.0.0-20230808133559-b036b712a89b h1:vab8deKC4QoIfm9fJM59iuNz1ELGsuLoYYpiF+pHiG8=
+github.com/petermattis/goid v0.0.0-20230808133559-b036b712a89b/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
+gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22/go.mod h1:yeKp02qBN3iKW1OzL3MGk2IdtZzaj7SFntXj72NppTA=
