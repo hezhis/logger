@@ -115,7 +115,12 @@ func InitLogger(name string) {
 
 	//log文件夹不存在则先创建
 	if logPath == "" {
-		logPath = DefaultLogPath
+		dir := os.Getenv("TLOGDIR")
+		if len(dir) > 0 {
+			logPath = dir
+		} else {
+			logPath = DefaultLogPath
+		}
 	}
 
 	logName = name
