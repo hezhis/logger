@@ -41,7 +41,7 @@ type FileLoggerWriter struct {
 	checkTimeToOpenNewFile    CheckTimeToOpenNewFileFunc
 	openCurrentFileTime       *time.Time
 	currentFileName           string
-	bufCh                     chan logData
+	bufCh                     chan LogData
 	isFlushing                atomic.Bool
 	flushSignCh               chan struct{}
 	flushDoneSignCh           chan error
@@ -53,7 +53,7 @@ func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullInterva
 		maxFileSize:               maxFileSize,
 		checkFileFullIntervalSecs: checkFileFullIntervalSecs,
 		checkTimeToOpenNewFile:    checkTimeToOpenNewFile,
-		bufCh:                     make(chan logData, bufChanLen),
+		bufCh:                     make(chan LogData, bufChanLen),
 		flushSignCh:               make(chan struct{}),
 		flushDoneSignCh:           make(chan error),
 	}
@@ -125,7 +125,7 @@ func (w *FileLoggerWriter) isFlushingNow() bool {
 	return w.isFlushing.Load()
 }
 
-func (w *FileLoggerWriter) Write(data logData) {
+func (w *FileLoggerWriter) Write(data LogData) {
 	select {
 	case w.bufCh <- data:
 	default:

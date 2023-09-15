@@ -106,7 +106,7 @@ func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
 		return
 	}
 
-	data := logData{
+	data := LogData{
 		Level:     curLv,
 		Timestamp: time.Now().Format("01-02 15:04:05.9999"),
 		AppName:   instance.name,

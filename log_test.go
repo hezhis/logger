@@ -47,7 +47,7 @@ func TestRead(t *testing.T) {
 
 		if len(line) > 0 {
 			log.Println(line)
-			data := logData{}
+			data := LogData{}
 			err := json.Unmarshal([]byte(line), &data)
 			if nil != err {
 				log.Println(err)

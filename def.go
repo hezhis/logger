@@ -1,6 +1,6 @@
 package logger
 
-type logData struct {
+type LogData struct {
 	Level     int    `json:"level"`     // 日志等级
 	Timestamp string `json:"timestamp"` // 时间
 	AppName   string `json:"app_name"`  // 应用名字
