@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,13 +14,18 @@ type CheckTimeToOpenNewFileFunc func(lastOpenFileTime *time.Time, isNeverOpenFil
 
 var OpenNewFileByByDateHour CheckTimeToOpenNewFileFunc = func(lastOpenFileTime *time.Time, isNeverOpenFile bool) (string, bool) {
 	if isNeverOpenFile {
-		return time.Now().Format(logName + ".01-02.log"), true
+		return instance.name + time.Now().Format(".01-02-15.log"), true
 	}
 
 	lastOpenYear, lastOpenMonth, lastOpenDay := lastOpenFileTime.Date()
-	nowYear, nowMonth, nowDay := time.Now().Date()
-	if lastOpenDay != nowDay || lastOpenMonth != nowMonth || lastOpenYear != nowYear {
-		return time.Now().Format(logName + ".01-02.log"), true
+	lastHour := lastOpenFileTime.Hour()
+
+	now := time.Now()
+	nowYear, nowMonth, nowDay := now.Date()
+	nowHour := now.Hour()
+
+	if lastOpenDay != nowDay || lastOpenMonth != nowMonth || lastOpenYear != nowYear || lastHour != nowHour {
+		return instance.name + time.Now().Format(".01-02-15.log"), true
 	}
 
 	return "", false
@@ -35,7 +41,7 @@ type FileLoggerWriter struct {
 	checkTimeToOpenNewFile    CheckTimeToOpenNewFileFunc
 	openCurrentFileTime       *time.Time
 	currentFileName           string
-	bufCh                     chan []byte
+	bufCh                     chan logData
 	isFlushing                atomic.Bool
 	flushSignCh               chan struct{}
 	flushDoneSignCh           chan error
@@ -47,7 +53,7 @@ func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullInterva
 		maxFileSize:               maxFileSize,
 		checkFileFullIntervalSecs: checkFileFullIntervalSecs,
 		checkTimeToOpenNewFile:    checkTimeToOpenNewFile,
-		bufCh:                     make(chan []byte, bufChanLen),
+		bufCh:                     make(chan logData, bufChanLen),
 		flushSignCh:               make(chan struct{}),
 		flushDoneSignCh:           make(chan error),
 	}
@@ -119,26 +125,34 @@ func (w *FileLoggerWriter) isFlushingNow() bool {
 	return w.isFlushing.Load()
 }
 
-func (w *FileLoggerWriter) Write(logContent string) {
+func (w *FileLoggerWriter) Write(data logData) {
 	select {
-	case w.bufCh <- []byte(logContent):
+	case w.bufCh <- data:
 	default:
 		// never blocking main thread
-		fmt.Println("log content cached buf full, lost:" + logContent)
+		buf, _ := json.Marshal(data)
+		fmt.Println("log content cached buf full, lost:" + string(buf))
 	}
 }
 
 func (w *FileLoggerWriter) Loop() error {
 	doWriteMoreAsPossible := func(buf []byte) error {
 		for {
-			var moreBuf []byte
+			flag := false
 			select {
-			case moreBuf = <-w.bufCh:
-				buf = append(buf, moreBuf...)
+			case data := <-w.bufCh:
+				flag = true
+				if s, err := json.Marshal(data); nil == err {
+					buf = append(buf, s...)
+					buf = append(buf, []byte("\n")...)
+					if instance.bScreen {
+						fmt.Printf(data.color+"\n", s)
+					}
+				}
 			default:
 			}
 
-			if moreBuf == nil {
+			if !flag {
 				break
 			}
 		}
@@ -176,9 +190,18 @@ func (w *FileLoggerWriter) Loop() error {
 
 	for {
 		select {
-		case buf := <-w.bufCh:
-			if err := doWriteMoreAsPossible(buf); err != nil {
-				return err
+		case data := <-w.bufCh:
+			buf, err := json.Marshal(data)
+			if nil == err {
+				buf = append(buf, []byte("\n")...)
+
+				if instance.bScreen {
+					fmt.Printf(data.color+"\n", buf)
+				}
+
+				if err = doWriteMoreAsPossible(buf); err != nil {
+					return err
+				}
 			}
 		case _ = <-w.flushSignCh:
 			if err := doWriteMoreAsPossible([]byte{}); err != nil {

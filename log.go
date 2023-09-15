@@ -1,13 +1,13 @@
 package logger
 
 import (
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -16,170 +16,85 @@ import (
 	"github.com/petermattis/goid"
 )
 
-const (
-	TraceLevel = iota // Trace级别
-	DebugLevel        // Debug级别
-	InfoLevel         // Info级别
-	WarnLevel         // Warn级别
-	ErrorLevel        // Error级别
-	stackLevel        // stack级别
-	fatalLevel        // Fatal级别
-)
-
-const (
-	LogFileMaxSize = 1024 * 1024 * 1024 * 10
-	fileMode       = 0777
-)
-
-const (
-	traceColor = "\033[32m[Trace]\033[0m\t"
-	debugColor = "\033[32m[Debug]\033[0m\t"
-	infoColor  = "\033[32m[Info]\033[0m\t"
-	warnColor  = "\033[35m[Warn]\033[0m\t"
-	errorColor = "\033[31m[Error]\033[0m\t"
-	stackColor = "\033[31m[Stack]\033[0m\t"
-	fatalColor = "\033[31m[Fatal]\033[0m\t"
-)
-
-const (
-	ConsoleLogStyle_Simple = "simple"
-	ConsoleLogStyle_Detail = "detail"
-)
-
-var IsOutputScreen = true
+type logger struct {
+	name    string // 日志名字
+	level   int    // 日志等级
+	bScreen bool   // 是否打印屏幕
+	path    string // 目录
+	prefix  string // 标识
+}
 
 var (
-	writer          *FileLoggerWriter
-	level           = TraceLevel
-	logName         string //日志名称
-	skip            = 2    //跳过等级
-	logPath         string
-	hasInit         bool
-	initMu          sync.Mutex
-	consoleLogStyle string = ConsoleLogStyle_Detail
-	logPrefix              = ""
+	instance *logger
+	writer   *FileLoggerWriter
+	initMu   sync.Mutex
+	skip     = 2 //跳过等级
 )
-
-// GetLevel 获取日志级别
-func GetLevel() int {
-	return level
-}
 
 // SetLevel 设置日志级别
 func SetLevel(l int) {
 	if l > fatalLevel || l < TraceLevel {
-		level = TraceLevel
-	} else {
-		level = l
-	}
-}
-
-// SetLogPath 设置日志路径
-func SetLogPath(path string) {
-	logPath = path
-}
-
-// SetLogPath 设置日志路径
-func SetLogPrefix(prefix string) {
-	logPrefix = prefix
-}
-
-func SetConsoleLogStyle(style string) {
-	if style != ConsoleLogStyle_Simple && style != ConsoleLogStyle_Detail {
 		return
 	}
-	consoleLogStyle = style
-}
-
-func HasInit() bool {
-	return hasInit
-}
-
-// InitLogger 日志模块初始化函数,程序启动时调用
-func InitLogger(name string) {
-	if HasInit() {
-		return
+	if nil != instance {
+		instance.level = l
 	}
+}
 
+func InitLogger(opts ...Option) {
 	initMu.Lock()
 	defer initMu.Unlock()
 
-	// maybe other thread is doing init too.
-	if HasInit() {
-		return
+	if nil == instance {
+		instance = &logger{}
 	}
-
-	defer func() {
-		hasInit = true
-	}()
+	for _, opt := range opts {
+		opt(instance)
+	}
 
 	//log文件夹不存在则先创建
-	if logPath == "" {
+	if instance.path == "" {
 		dir := os.Getenv("TLOGDIR")
 		if len(dir) > 0 {
-			logPath = dir
+			instance.path = dir
 		} else {
-			logPath = DefaultLogPath
+			instance.path = DefaultLogPath
 		}
 	}
 
-	logName = name
+	if nil == writer {
+		writer = NewFileLoggerWriter(instance.path, LogFileMaxSize, 5, OpenNewFileByByDateHour, 100000)
 
-	writer = NewFileLoggerWriter(logPath, LogFileMaxSize, 5, OpenNewFileByByDateHour, 100000)
-	go func() {
-		err := writer.Loop()
-		if err != nil {
-			panic(err)
-		}
-	}()
+		go func() {
+			err := writer.Loop()
+			if err != nil {
+				panic(err)
+			}
+		}()
+	}
+
 	pID := os.Getpid()
 	pIDStr := strconv.FormatInt(int64(pID), 10)
-	Info("==========================================")
-	Info("===log:%v,pid:%v==logPath:%s==", name, pIDStr, logPath)
-	Info("==========================================")
+	Info("===log:%v,pid:%v==logPath:%s==", instance.name, pIDStr, instance.path)
 }
 
-type InfoStyle int
-
-const (
-	InfoStyle_Detail InfoStyle = 1
-	InfoStyle_Simple InfoStyle = 2
-)
-
-func GetDetailInfo(style InfoStyle) string {
+func GetDetailInfo() (file, funcName string, line int) {
 	pc := make([]uintptr, 10) // at least 1 entry needed
 	runtime.Callers(skip, pc)
 	f := runtime.FuncForPC(pc[skip])
 	if nil == f || len(pc) <= skip {
-		return ""
+		return
 	}
-	file, line := f.FileLine(pc[skip])
+	file, line = f.FileLine(pc[skip])
 	for i := len(file) - 1; i > 0; i-- {
 		if file[i] == '/' {
 			file = file[i+1:]
 			break
 		}
 	}
-	funcName := f.Name()
-	//for i := len(funcName) - 1; i > 0; i-- {
-	//	if funcName[i] == '.' {
-	//		funcName = funcName[i+1:]
-	//		break
-	//	}
-	//}
-	var traceId string
-	if traceId, _ = trace.Ctx.GetCurGTrace(goid.Get()); traceId == "" {
-		traceId = "UNKNOWN"
-	}
+	funcName = f.Name()
 
-	if style == InfoStyle_Detail {
-		return fmt.Sprintf("\033[32m["+logName+"] %s [trace:%s] [%s:%d %s] %s\033[0m ", time.Now().Format("01-02 15:04:05.9999"), traceId, file, line, funcName, logPrefix)
-	}
-
-	if style == InfoStyle_Simple {
-		return fmt.Sprintf("\033[32m["+logName+"] %s [trace:%s] [%s:%d] %s\033[0m ", time.Now().Format("01-02 15:04:05.9999"), traceId, file, line, logPrefix)
-	}
-	return ""
+	return
 }
 
 func Flush() {
@@ -187,51 +102,56 @@ func Flush() {
 }
 
 func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
-	if level > curLv {
+	if instance.level > curLv {
 		return
 	}
 
-	var builder strings.Builder
-	builder.WriteString(colorInfo)
-	builder.WriteString(GetDetailInfo(InfoStyle_Detail))
+	data := logData{
+		Level:     curLv,
+		Timestamp: time.Now().Format("01-02 15:04:05.9999"),
+		AppName:   instance.name,
+		Prefix:    instance.prefix,
+		color:     colorInfo,
+	}
+
+	if traceId, _ := trace.Ctx.GetCurGTrace(goid.Get()); traceId != "" {
+		data.TraceId = traceId
+	} else {
+		data.TraceId = "UNKNOWN"
+	}
+
+	data.File, data.Func, data.Line = GetDetailInfo()
+
 	content := fmt.Sprintf(format, v...)
 	// protect disk
-	if utf8.RuneCountInString(content) > 1000 {
-		content = string([]rune(content)[:1000]) + "..."
+	if utf8.RuneCountInString(content) > 10000 {
+		content = string([]rune(content)[:10000]) + "..."
 	}
-	builder.WriteString(content)
+	data.Content = content
 
 	if curLv >= stackLevel {
 		buf := make([]byte, 4096)
 		l := runtime.Stack(buf, true)
-		builder.WriteString("\n")
-		builder.WriteString(string(buf[:l]))
+		data.Stack = string(buf[:l])
 	}
 
-	writer.Write(builder.String() + "\n")
+	writer.Write(data)
 
 	if curLv == fatalLevel {
 		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 		tf := time.Now()
-		ioutil.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, logName, tf.Month(), tf.Day(), tf.Hour(), tf.Minute(), tf.Second()), []byte(builder.String()), fileMode)
 
-		panic(builder.String())
-	}
-
-	if IsOutputScreen {
-		if consoleLogStyle == ConsoleLogStyle_Simple && curLv == TraceLevel {
-			return
+		buf, err := json.Marshal(data)
+		if nil != err {
+			panic(err)
+		} else {
+			err := os.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, instance.name, tf.Month(), tf.Day(),
+				tf.Hour(), tf.Minute(), tf.Second()), buf, fileMode)
+			if nil != err {
+				log.Println(err)
+			}
+			panic(buf)
 		}
-
-		if consoleLogStyle == ConsoleLogStyle_Simple {
-			var consoleStringBuilder strings.Builder
-			consoleStringBuilder.WriteString(colorInfo)
-			consoleStringBuilder.WriteString(GetDetailInfo(InfoStyle_Simple))
-			consoleStringBuilder.WriteString(fmt.Sprintf(format, v...))
-			fmt.Println(consoleStringBuilder.String())
-			return
-		}
-		fmt.Println(builder.String())
 	}
 }
 
@@ -271,23 +191,7 @@ func Stack(format string, v ...interface{}) {
 
 // ErrorfNoCaller 错误类型日志 不包含调用信息
 func ErrorfNoCaller(format string, v ...interface{}) {
-	if level <= ErrorLevel {
-		var traceId string
-		if traceId, _ = trace.Ctx.GetCurGTrace(goid.Get()); traceId == "" {
-			traceId = "UNKNOWN"
-		}
-
-		var builder strings.Builder
-		builder.WriteString(errorColor)
-		timeInfo := fmt.Sprintf("["+logName+"] %s [trace:%s]", time.Now().Format("01-02 15:04:05.9999"), traceId)
-		builder.WriteString(timeInfo)
-		builder.WriteString(fmt.Sprintf(format, v...))
-		writer.Write(builder.String() + "\n")
-
-		if IsOutputScreen {
-			fmt.Println(builder.String())
-		}
-	}
+	Errorf(format, v...)
 }
 
 func DebugIf(ok bool, format string, v ...interface{}) {
