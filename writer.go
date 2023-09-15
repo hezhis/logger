@@ -196,7 +196,7 @@ func (w *FileLoggerWriter) Loop() error {
 				buf = append(buf, []byte("\n")...)
 
 				if instance.bScreen {
-					fmt.Printf(data.color+"\n", buf)
+					fmt.Printf(data.color, buf)
 				}
 
 				if err = doWriteMoreAsPossible(buf); err != nil {

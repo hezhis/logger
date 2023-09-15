@@ -30,11 +30,11 @@ const (
 )
 
 const (
-	traceColor = "\033[32m%s\033[0m\t"
-	debugColor = "\033[32m%s\033[0m\t"
-	infoColor  = "\033[32m%s\033[0m\t"
-	warnColor  = "\033[35m%s\033[0m\t"
-	errorColor = "\033[31m%s\033[0m\t"
-	stackColor = "\033[31m%s\033[0m\t"
-	fatalColor = "\033[31m%s\033[0m\t"
+	traceColor = "\033[32m%s\033[0m"
+	debugColor = "\033[32m%s\033[0m"
+	infoColor  = "\033[32m%s\033[0m"
+	warnColor  = "\033[35m%s\033[0m"
+	errorColor = "\033[31m%s\033[0m"
+	stackColor = "\033[31m%s\033[0m"
+	fatalColor = "\033[31m%s\033[0m"
 )
