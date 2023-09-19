@@ -20,7 +20,7 @@ type LogData struct {
 }
 
 func (d *LogData) String() string {
-	return fmt.Sprintf("["+d.AppName+"] %s [trace:%s] [%s:%d %s] %s", time.Now().Format("01-02 15:04:05.9999"), d.TraceId, d.File, d.Line, d.Func, d.Prefix)
+	return fmt.Sprintf(" %s [%s:%d %s]", time.Now().Format("01-02 15:04:05.9999"), d.File, d.Line, d.Func)
 }
 
 const (
