@@ -134,7 +134,9 @@ func (w *FileLoggerWriter) Write(data LogData) {
 		fmt.Println("log content cached buf full, lost:" + string(buf))
 	}
 }
-
+func (w *FileLoggerWriter) printfData(data LogData) {
+	fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content)
+}
 func (w *FileLoggerWriter) Loop() error {
 	doWriteMoreAsPossible := func(buf []byte) error {
 		for {
@@ -146,7 +148,7 @@ func (w *FileLoggerWriter) Loop() error {
 					buf = append(buf, s...)
 					buf = append(buf, []byte("\n")...)
 					if instance.bScreen {
-						fmt.Printf(data.color+"\n", s)
+						w.printfData(data)
 					}
 				}
 			default:
@@ -196,7 +198,7 @@ func (w *FileLoggerWriter) Loop() error {
 				buf = append(buf, []byte("\n")...)
 
 				if instance.bScreen {
-					fmt.Printf(data.color, buf)
+					w.printfData(data)
 				}
 
 				if err = doWriteMoreAsPossible(buf); err != nil {

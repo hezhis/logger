@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -28,7 +30,7 @@ var (
 	instance *logger
 	writer   *FileLoggerWriter
 	initMu   sync.Mutex
-	skip     = 2 //跳过等级
+	skip     = 3 //跳过等级
 )
 
 // SetLevel 设置日志级别
@@ -78,23 +80,27 @@ func InitLogger(opts ...Option) {
 	Info("===log:%v,pid:%v==logPath:%s==", instance.name, pIDStr, instance.path)
 }
 
-func GetDetailInfo() (file, funcName string, line int) {
-	pc := make([]uintptr, 10) // at least 1 entry needed
-	runtime.Callers(skip, pc)
-	f := runtime.FuncForPC(pc[skip])
-	if nil == f || len(pc) <= skip {
+func getPackageName(f string) (filePath string, fileFunc string) {
+	slashIndex := strings.LastIndex(f, "/")
+	filePath = f
+	if slashIndex > 0 {
+		idx := strings.Index(f[slashIndex:], ".") + slashIndex
+		filePath = f[:idx]
+		fileFunc = f[idx+1:]
 		return
 	}
-	file, line = f.FileLine(pc[skip])
-	for i := len(file) - 1; i > 0; i-- {
-		if file[i] == '/' {
-			file = file[i+1:]
-			break
-		}
-	}
-	funcName = f.Name()
-
 	return
+}
+
+func GetDetailInfo() (file, funcName string, line int) {
+	pc, callFile, callLine, ok := runtime.Caller(skip)
+	var callFuncName string
+	if ok {
+		// 拿到调用方法
+		callFuncName = runtime.FuncForPC(pc).Name()
+	}
+	filePath, fileFunc := getPackageName(callFuncName)
+	return path.Join(filePath, path.Base(callFile)), fileFunc, callLine
 }
 
 func Flush() {
@@ -150,7 +156,7 @@ func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
 			if nil != err {
 				log.Println(err)
 			}
-			panic(buf)
+			panic(string(buf))
 		}
 	}
 }
@@ -196,43 +202,43 @@ func ErrorfNoCaller(format string, v ...interface{}) {
 
 func DebugIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Debug(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
 func InfoIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Info(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
 func WarnIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Warn(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
 func ErrorIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Errorf(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
 func FatalIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Fatalf(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
 func StackIf(ok bool, format string, v ...interface{}) {
 	if ok {
-		skip = 3
+		skip = 4
 		Stack(format, v...)
-		skip = 2
+		skip = 3
 	}
 }
