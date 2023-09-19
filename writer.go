@@ -135,7 +135,11 @@ func (w *FileLoggerWriter) Write(data LogData) {
 	}
 }
 func (w *FileLoggerWriter) printfData(data LogData) {
-	fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content)
+	if data.Level >= stackLevel {
+		fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content+"\n"+data.Stack)
+	} else {
+		fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content)
+	}
 }
 func (w *FileLoggerWriter) Loop() error {
 	doWriteMoreAsPossible := func(buf []byte) error {
