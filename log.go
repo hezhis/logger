@@ -35,7 +35,7 @@ var (
 
 // SetLevel 设置日志级别
 func SetLevel(l int) {
-	if l > fatalLevel || l < TraceLevel {
+	if l > FatalLevel || l < TraceLevel {
 		return
 	}
 	if nil != instance {
@@ -135,7 +135,7 @@ func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
 	}
 	data.Content = content
 
-	if curLv >= stackLevel {
+	if curLv >= StackLevel {
 		buf := make([]byte, 4096)
 		l := runtime.Stack(buf, true)
 		data.Stack = string(buf[:l])
@@ -143,7 +143,7 @@ func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
 
 	writer.Write(data)
 
-	if curLv == fatalLevel {
+	if curLv == FatalLevel {
 		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 		tf := time.Now()
 
@@ -187,12 +187,12 @@ func Errorf(format string, v ...interface{}) {
 
 // Fatalf 致命错误类型日志
 func Fatalf(format string, v ...interface{}) {
-	doWrite(fatalLevel, fatalColor, format, v...)
+	doWrite(FatalLevel, fatalColor, format, v...)
 }
 
 // Stack 堆栈debug日志
 func Stack(format string, v ...interface{}) {
-	doWrite(stackLevel, stackColor, format, v...)
+	doWrite(StackLevel, stackColor, format, v...)
 }
 
 // ErrorfNoCaller 错误类型日志 不包含调用信息

@@ -135,7 +135,7 @@ func (w *FileLoggerWriter) Write(data LogData) {
 	}
 }
 func (w *FileLoggerWriter) printfData(data LogData) {
-	if data.Level >= stackLevel {
+	if data.Level >= StackLevel {
 		fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content+"\n"+data.Stack)
 	} else {
 		fmt.Printf(data.color+" %s"+"\n", data.String(), data.Content)

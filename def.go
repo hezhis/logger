@@ -29,8 +29,8 @@ const (
 	InfoLevel         // Info级别
 	WarnLevel         // Warn级别
 	ErrorLevel        // Error级别
-	stackLevel        // stack级别
-	fatalLevel        // Fatal级别
+	StackLevel        // stack级别
+	FatalLevel        // Fatal级别
 )
 
 const (
