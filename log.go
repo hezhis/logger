@@ -1,9 +1,7 @@
 package logger
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -108,56 +106,46 @@ func Flush() {
 }
 
 func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
-	if instance.level > curLv {
-		return
-	}
+	var builder strings.Builder
 
-	data := LogData{
-		Level:     curLv,
-		Timestamp: time.Now().Format("01-02 15:04:05.9999"),
-		AppName:   instance.name,
-		Prefix:    instance.prefix,
-		color:     colorInfo,
-	}
+	file, funcName, line := GetDetailInfo()
 
-	if traceId, _ := trace.Ctx.GetCurGTrace(goid.Get()); traceId != "" {
-		data.TraceId = traceId
-	} else {
-		data.TraceId = "UNKNOWN"
+	traceId := "UNKNOWN"
+	if id, _ := trace.Ctx.GetCurGTrace(goid.Get()); id != "" {
+		traceId = id
 	}
+	detail := fmt.Sprintf("%s [%s:%d %s] ", time.Now().Format("01-02 15:04:05.9999"), file, line, funcName)
+	detail = fmt.Sprintf(colorInfo, detail)
+	builder.WriteString(detail)
 
-	data.File, data.Func, data.Line = GetDetailInfo()
+	builder.WriteString(fmt.Sprintf("[trace:%s, prefix:%s] ", traceId, instance.prefix))
 
 	content := fmt.Sprintf(format, v...)
 	// protect disk
-	if utf8.RuneCountInString(content) > 10000 {
-		content = string([]rune(content)[:10000]) + "..."
+	if size := utf8.RuneCountInString(content); size > 10000 {
+		content = "..." + string([]rune(content)[size-10000:])
 	}
-	data.Content = content
+	builder.WriteString(content)
 
 	if curLv >= StackLevel {
 		buf := make([]byte, 4096)
 		l := runtime.Stack(buf, true)
-		data.Stack = string(buf[:l])
+		builder.WriteString("\n")
+		builder.WriteString(string(buf[:l]))
 	}
-
-	writer.Write(data)
 
 	if curLv == FatalLevel {
 		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 		tf := time.Now()
+		os.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, instance.name, tf.Month(), tf.Day(), tf.Hour(), tf.Minute(), tf.Second()), []byte(builder.String()), fileMode)
 
-		buf, err := json.Marshal(data)
-		if nil != err {
-			panic(err)
-		} else {
-			err := os.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, instance.name, tf.Month(), tf.Day(),
-				tf.Hour(), tf.Minute(), tf.Second()), buf, fileMode)
-			if nil != err {
-				log.Println(err)
-			}
-			panic(string(buf))
-		}
+		panic(builder.String())
+	}
+	builder.WriteString("\n")
+	writer.Write(builder.String())
+
+	if instance.bScreen {
+		fmt.Printf("%s%s\n", detail, content)
 	}
 }
 
