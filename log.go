@@ -106,6 +106,9 @@ func Flush() {
 }
 
 func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
+	if curLv < instance.level {
+		return
+	}
 	var builder strings.Builder
 
 	file, funcName, line := GetDetailInfo()
