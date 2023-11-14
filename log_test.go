@@ -14,9 +14,9 @@ func TestLog(t *testing.T) {
 		content += fmt.Sprintf("你好(%d)", i)
 	}
 	InitLogger(WithAppName("test"), WithLevel(InfoLevel), WithPrefix("pfId:1"), WithScreen(true))
-	Debug(content)
-	Info("Info line2")
-	Errorf("Error")
+	LogDebug(content)
+	LogInfo("Info line2")
+	LogError("Error")
 	Flush()
 }
 
@@ -36,9 +36,9 @@ func TestLog1(t *testing.T) {
 			}
 			switch err.(type) {
 			case runtime.Error: // 运行时错误
-				Stack("runtime error:%v", err)
+				LogStack("runtime error:%v", err)
 			default: // 非运行时错误
-				Stack("error:%v", err)
+				LogStack("error:%v", err)
 			}
 		}()
 

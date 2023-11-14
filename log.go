@@ -24,12 +24,35 @@ type logger struct {
 	prefix  string // 标识
 }
 
+type ILogger interface {
+	LogWarn(format string, v ...interface{})
+	LogInfo(format string, v ...interface{})
+	LogError(format string, v ...interface{})
+	LogFatal(format string, v ...interface{})
+	LogDebug(format string, v ...interface{})
+	LogStack(format string, v ...interface{})
+	LogTrace(format string, v ...interface{})
+	LogErrorNoCaller(format string, v ...interface{})
+}
+
 var (
 	instance *logger
 	writer   *FileLoggerWriter
 	initMu   sync.Mutex
 	skip     = 3 //跳过等级
 )
+
+type IRequester interface {
+	GetLogPrefix() string
+	GetLogCallStackSkip() int
+}
+
+type DefaultLogRequester struct {
+}
+
+func (d *DefaultLogRequester) GetPrefix() string {
+	return ""
+}
 
 // SetLevel 设置日志级别
 func SetLevel(l int) {
@@ -75,7 +98,7 @@ func InitLogger(opts ...Option) {
 
 	pID := os.Getpid()
 	pIDStr := strconv.FormatInt(int64(pID), 10)
-	Info("===log:%v,pid:%v==logPath:%s==", instance.name, pIDStr, instance.path)
+	LogInfo("===log:%v,pid:%v==logPath:%s==", instance.name, pIDStr, instance.path)
 }
 
 func getPackageName(f string) (filePath string, fileFunc string) {
@@ -90,7 +113,7 @@ func getPackageName(f string) (filePath string, fileFunc string) {
 	return
 }
 
-func GetDetailInfo() (file, funcName string, line int) {
+func GetDetailInfo(skip int) (file, funcName string, line int) {
 	pc, callFile, callLine, ok := runtime.Caller(skip)
 	var callFuncName string
 	if ok {
@@ -105,13 +128,13 @@ func Flush() {
 	writer.Flush()
 }
 
-func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
+func doWrite(callSkip int, curLv int, colorInfo, format string, v ...interface{}) {
 	if curLv < instance.level {
 		return
 	}
 	var builder strings.Builder
 
-	file, funcName, line := GetDetailInfo()
+	file, funcName, line := GetDetailInfo(callSkip)
 
 	traceId := "UNKNOWN"
 	if id, _ := trace.Ctx.GetCurGTrace(goid.Get()); id != "" {
@@ -152,84 +175,98 @@ func doWrite(curLv int, colorInfo, format string, v ...interface{}) {
 	}
 }
 
-func Trace(format string, v ...interface{}) {
-	doWrite(TraceLevel, traceColor, format, v...)
+// LogTrace 跟踪类型日志
+func LogTrace(format string, v ...interface{}) {
+	doWrite(skip, TraceLevel, traceColor, format, v...)
 }
 
-// Debug 调试类型日志
-func Debug(format string, v ...interface{}) {
-	doWrite(DebugLevel, debugColor, format, v...)
+// LogTraceWithRequester 跟踪类型日志
+func LogTraceWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), TraceLevel, traceColor, format, v...)
 }
 
-// Warn 警告类型日志
-func Warn(format string, v ...interface{}) {
-	doWrite(WarnLevel, warnColor, format, v...)
+// LogDebug 调试类型日志
+func LogDebug(format string, v ...interface{}) {
+	doWrite(skip, DebugLevel, debugColor, format, v...)
 }
 
-// Info 程序信息类型日志
-func Info(format string, v ...interface{}) {
-	doWrite(InfoLevel, infoColor, format, v...)
+// LogDebugWithRequester 调试类型日志
+func LogDebugWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), DebugLevel, debugColor, format, v...)
 }
 
-// Error 错误类型日志
-func Errorf(format string, v ...interface{}) {
-	doWrite(ErrorLevel, errorColor, format, v...)
+// LogWarn 警告类型日志
+func LogWarn(format string, v ...interface{}) {
+	doWrite(skip, WarnLevel, warnColor, format, v...)
 }
 
-// Fatalf 致命错误类型日志
-func Fatalf(format string, v ...interface{}) {
-	doWrite(FatalLevel, fatalColor, format, v...)
+// LogWarnWithRequester 警告类型日志
+func LogWarnWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), WarnLevel, warnColor, format, v...)
 }
 
-// Stack 堆栈debug日志
-func Stack(format string, v ...interface{}) {
-	doWrite(StackLevel, stackColor, format, v...)
+// LogInfo 程序信息类型日志
+func LogInfo(format string, v ...interface{}) {
+	doWrite(skip, InfoLevel, infoColor, format, v...)
 }
 
-// ErrorfNoCaller 错误类型日志 不包含调用信息
-func ErrorfNoCaller(format string, v ...interface{}) {
-	Errorf(format, v...)
+// InfoWithRequester 程序信息类型日志
+func LogInfoWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), InfoLevel, infoColor, format, v...)
 }
 
-func DebugIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Debug(format, v...)
-		skip = 3
-	}
+// LogError 错误类型日志
+func LogError(format string, v ...interface{}) {
+	doWrite(skip, ErrorLevel, errorColor, format, v...)
 }
-func InfoIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Info(format, v...)
-		skip = 3
-	}
+
+// LogErrorWithRequester 错误类型日志
+func LogErrorWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), ErrorLevel, errorColor, format, v...)
 }
-func WarnIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Warn(format, v...)
-		skip = 3
-	}
+
+// LogFatal 致命错误类型日志
+func LogFatal(format string, v ...interface{}) {
+	doWrite(skip, FatalLevel, fatalColor, format, v...)
 }
-func ErrorIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Errorf(format, v...)
-		skip = 3
-	}
+
+// LogFatalWithRequester 致命错误类型日志
+func LogFatalWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), FatalLevel, fatalColor, format, v...)
 }
-func FatalIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Fatalf(format, v...)
-		skip = 3
-	}
+
+// LogStack 堆栈debug日志
+func LogStack(format string, v ...interface{}) {
+	doWrite(skip, StackLevel, stackColor, format, v...)
 }
-func StackIf(ok bool, format string, v ...interface{}) {
-	if ok {
-		skip = 4
-		Stack(format, v...)
-		skip = 3
-	}
+
+// LogStackWithRequester 堆栈debug日志
+func LogStackWithRequester(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(requester.GetLogCallStackSkip(), StackLevel, stackColor, format, v...)
+}
+
+// LogErrorNoCaller 错误类型日志 不包含调用信息
+func LogErrorNoCaller(format string, v ...interface{}) {
+	doWrite(0, ErrorLevel, errorColor, format, v...)
+}
+
+// LogErrorWithRequesterNoCaller 错误类型日志 不包含调用信息
+func LogErrorWithRequesterNoCaller(requester IRequester, format string, v ...interface{}) {
+	prefix := requester.GetLogPrefix()
+	format = prefix + format
+	doWrite(0, ErrorLevel, errorColor, format, v...)
 }
