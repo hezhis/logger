@@ -32,15 +32,21 @@ type ILogger interface {
 	LogDebug(format string, v ...interface{})
 	LogStack(format string, v ...interface{})
 	LogTrace(format string, v ...interface{})
-	LogErrorNoCaller(format string, v ...interface{})
+	/* 	LogErrorNoCaller(format string, v ...interface{}) */
 }
 
 var (
 	instance *logger
 	writer   *FileLoggerWriter
 	initMu   sync.Mutex
-	skip     = 3 //跳过等级
+	baseSkip = 2 //跳过等级
 )
+
+type CallInfoSt struct {
+	File     string
+	Line     int
+	FuncName string
+}
 
 type IRequester interface {
 	GetLogPrefix() string
@@ -113,7 +119,7 @@ func getPackageName(f string) (filePath string, fileFunc string) {
 	return
 }
 
-func GetDetailInfo(skip int) (file, funcName string, line int) {
+func GetCallInfo(skip int) *CallInfoSt {
 	pc, callFile, callLine, ok := runtime.Caller(skip)
 	var callFuncName string
 	if ok {
@@ -121,20 +127,75 @@ func GetDetailInfo(skip int) (file, funcName string, line int) {
 		callFuncName = runtime.FuncForPC(pc).Name()
 	}
 	filePath, fileFunc := getPackageName(callFuncName)
-	return path.Join(filePath, path.Base(callFile)), fileFunc, callLine
+
+	return &CallInfoSt{
+		File:     path.Join(filePath, path.Base(callFile)),
+		Line:     callLine,
+		FuncName: fileFunc,
+	}
 }
 
 func Flush() {
 	writer.Flush()
 }
 
-func doWrite(callSkip int, curLv int, colorInfo, format string, v ...interface{}) {
+func buildTimeInfo() string {
+	return time.Now().Format("01-02 15:04:05.9999")
+}
+
+func buildTraceInfo() string {
+	traceId := "UNKNOWN"
+	if id, _ := trace.Ctx.GetCurGTrace(goid.Get()); id != "" {
+		traceId = id
+	}
+	return traceId
+}
+
+func buildContent(format string, v ...interface{}) string {
+	content := fmt.Sprintf(format, v...)
+	// protect disk
+	if size := utf8.RuneCountInString(content); size > 10000 {
+		content = "..." + string([]rune(content)[size-10000:])
+	}
+	return content
+}
+
+func buildStackInfo() string {
+	buf := make([]byte, 4096)
+	l := runtime.Stack(buf, true)
+	return string(buf[:l])
+}
+
+func buildCallInfo(call *CallInfoSt) string {
+	if call == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d %s", call.File, call.Line, call.FuncName)
+}
+
+func buildRecord(curLv int, colorInfo, timeInfo, traceInfo, callerInfo, prefix, content string) string {
+	var builder strings.Builder
+
+	header := fmt.Sprintf("%s %s [%s] [trace: %s] ", timeInfo, prefix, callerInfo, traceInfo)
+	builder.WriteString(fmt.Sprintf(colorInfo, header))
+
+	builder.WriteString(content)
+	if curLv >= StackLevel {
+		builder.WriteString("\n")
+		builder.WriteString(buildStackInfo())
+	}
+
+	builder.WriteString("\n")
+	return builder.String()
+}
+
+/* func doWrite(callSkip int, curLv int, colorInfo, format string, v ...interface{}) {
 	if curLv < instance.level {
 		return
 	}
 	var builder strings.Builder
 
-	file, funcName, line := GetDetailInfo(callSkip)
+	file, funcName, line := GetCallInfo(callSkip)
 
 	traceId := "UNKNOWN"
 	if id, _ := trace.Ctx.GetCurGTrace(goid.Get()); id != "" {
@@ -173,100 +234,197 @@ func doWrite(callSkip int, curLv int, colorInfo, format string, v ...interface{}
 	if instance.bScreen {
 		fmt.Printf("%s%s\n", detail, content)
 	}
-}
+} */
 
 // LogTrace 跟踪类型日志
 func LogTrace(format string, v ...interface{}) {
-	doWrite(skip, TraceLevel, traceColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(TraceLevel, traceColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogTraceWithRequester 跟踪类型日志
 func LogTraceWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), TraceLevel, traceColor, format, v...)
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(TraceLevel, traceColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogDebug 调试类型日志
 func LogDebug(format string, v ...interface{}) {
-	doWrite(skip, DebugLevel, debugColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(DebugLevel, debugColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogDebugWithRequester 调试类型日志
 func LogDebugWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), DebugLevel, debugColor, format, v...)
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(DebugLevel, debugColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogWarn 警告类型日志
 func LogWarn(format string, v ...interface{}) {
-	doWrite(skip, WarnLevel, warnColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(WarnLevel, warnColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogWarnWithRequester 警告类型日志
 func LogWarnWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), WarnLevel, warnColor, format, v...)
+
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(WarnLevel, warnColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogInfo 程序信息类型日志
 func LogInfo(format string, v ...interface{}) {
-	doWrite(skip, InfoLevel, infoColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(InfoLevel, infoColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // InfoWithRequester 程序信息类型日志
 func LogInfoWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), InfoLevel, infoColor, format, v...)
+
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(InfoLevel, infoColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogError 错误类型日志
 func LogError(format string, v ...interface{}) {
-	doWrite(skip, ErrorLevel, errorColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(ErrorLevel, errorColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogErrorWithRequester 错误类型日志
 func LogErrorWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), ErrorLevel, errorColor, format, v...)
+
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(ErrorLevel, errorColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogFatal 致命错误类型日志
 func LogFatal(format string, v ...interface{}) {
-	doWrite(skip, FatalLevel, fatalColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	content := buildContent(format, v...)
+	record := buildRecord(FatalLevel, fatalColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, content)
+	writer.Write(record)
+
+	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	tf := time.Now()
+	os.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, instance.name, tf.Month(), tf.Day(), tf.Hour(), tf.Minute(), tf.Second()), []byte(record), fileMode)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
+
+	panic(content)
 }
 
 // LogFatalWithRequester 致命错误类型日志
 func LogFatalWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), FatalLevel, fatalColor, format, v...)
+
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(FatalLevel, fatalColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
+
+	os.Exit(1)
 }
 
 // LogStack 堆栈debug日志
 func LogStack(format string, v ...interface{}) {
-	doWrite(skip, StackLevel, stackColor, format, v...)
+	callInfo := GetCallInfo(baseSkip)
+	record := buildRecord(StackLevel, stackColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
 // LogStackWithRequester 堆栈debug日志
 func LogStackWithRequester(requester IRequester, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(requester.GetLogCallStackSkip(), StackLevel, stackColor, format, v...)
+
+	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
+	record := buildRecord(StackLevel, stackColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
 
-// LogErrorNoCaller 错误类型日志 不包含调用信息
-func LogErrorNoCaller(format string, v ...interface{}) {
-	doWrite(0, ErrorLevel, errorColor, format, v...)
-}
-
-// LogErrorWithRequesterNoCaller 错误类型日志 不包含调用信息
-func LogErrorWithRequesterNoCaller(requester IRequester, format string, v ...interface{}) {
+func LogErrorWithRequesterAndCustomCallInfo(requester IRequester, callInfo *CallInfoSt, format string, v ...interface{}) {
 	prefix := requester.GetLogPrefix()
 	format = prefix + format
-	doWrite(0, ErrorLevel, errorColor, format, v...)
+
+	record := buildRecord(ErrorLevel, errorColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	writer.Write(record)
+
+	if instance.bScreen {
+		fmt.Printf("%s", record)
+	}
 }
