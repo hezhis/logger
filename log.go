@@ -382,14 +382,15 @@ func LogFatalWithRequester(requester IRequester, format string, v ...interface{}
 	format = prefix + format
 
 	callInfo := GetCallInfo(requester.GetLogCallStackSkip() + baseSkip)
-	record := buildRecord(FatalLevel, fatalColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, buildContent(format, v...))
+	content := buildContent(format, v...)
+	record := buildRecord(FatalLevel, fatalColor, buildTimeInfo(), buildTraceInfo(), buildCallInfo(callInfo), instance.prefix, content)
 	writer.Write(record)
 
 	if instance.bScreen {
 		fmt.Printf("%s", record)
 	}
 
-	os.Exit(1)
+	panic(content)
 }
 
 // LogStack 堆栈debug日志
