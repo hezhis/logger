@@ -57,7 +57,7 @@ func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullInterva
 }
 
 func (w *FileLoggerWriter) checkFileIsFull() (bool, error) {
-	if w.lastCheckIsFullAt != 0 && w.lastCheckIsFullAt+w.checkFileFullIntervalSecs < time.Now().Unix() {
+	if w.lastCheckIsFullAt != 0 && w.lastCheckIsFullAt+w.checkFileFullIntervalSecs > time.Now().Unix() {
 		return w.isFileFull, nil
 	}
 
