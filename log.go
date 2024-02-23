@@ -38,7 +38,7 @@ type ILogger interface {
 var (
 	instance *logger
 	initMu   sync.Mutex
-	baseSkip = 2 //跳过等级
+	baseSkip = 3 //跳过等级
 )
 
 type CallInfoSt struct {
