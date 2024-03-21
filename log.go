@@ -69,6 +69,10 @@ func SetLevel(l int) {
 	}
 }
 
+func GetLevel() int {
+	return instance.level
+}
+
 func InitLogger(opts ...Option) ILogger {
 	initMu.Lock()
 	defer initMu.Unlock()
