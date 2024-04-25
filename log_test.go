@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"github.com/gzjjyz/srvlib/utils/signal"
 	"log"
 	"runtime"
 	"testing"
@@ -18,6 +19,20 @@ func TestLog(t *testing.T) {
 	LogInfo("Info line2")
 	LogError("Error")
 	Flush()
+}
+
+func TestLogTime(t *testing.T) {
+	content := "测试"
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	InitLogger(WithAppName("test"), WithLevel(InfoLevel), WithPrefix("pfId:1"), WithScreen(true))
+	for range ticker.C {
+		LogDebug(fmt.Sprintf("Debug %s(%d)", content, time.Now().Unix()))
+		LogInfo(fmt.Sprintf("Info %s(%d)", content, time.Now().Unix()))
+		LogError(fmt.Sprintf("Error %s(%d)", content, time.Now().Unix()))
+	}
+
+	<-signal.SignalChan()
 }
 
 func TestLog1(t *testing.T) {

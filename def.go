@@ -11,8 +11,9 @@ const (
 )
 
 const (
-	LogFileMaxSize = 1024 * 1024 * 1024 * 10
-	fileMode       = 0777
+	LogFileMaxSize   = 512
+	fileMode         = 0777
+	backupTimeFormat = "2006-01-02T15-04-05.000"
 )
 
 const (

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -28,6 +30,11 @@ var OpenNewFileByByDateHour CheckTimeToOpenNewFileFunc = func(lastOpenFileTime *
 	return "", false
 }
 
+var (
+	osStat      = os.Stat
+	currentTime = time.Now
+)
+
 type FileLoggerWriter struct {
 	fp                        *os.File
 	baseDir                   string
@@ -42,6 +49,7 @@ type FileLoggerWriter struct {
 	isFlushing                atomic.Bool
 	flushSignCh               chan struct{}
 	flushDoneSignCh           chan error
+	mu                        sync.Mutex
 }
 
 func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullIntervalSecs int64, checkTimeToOpenNewFile CheckTimeToOpenNewFileFunc, bufChanLen uint32) *FileLoggerWriter {
@@ -72,6 +80,69 @@ func (w *FileLoggerWriter) checkFileIsFull() (bool, error) {
 	return w.isFileFull, nil
 }
 
+func (w *FileLoggerWriter) rotate() error {
+	if err := w.close(); err != nil {
+		return err
+	}
+	if err := w.openNew(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *FileLoggerWriter) close() error {
+	if w.fp == nil {
+		return nil
+	}
+	err := w.fp.Close()
+	w.fp = nil
+	return err
+}
+
+func (w *FileLoggerWriter) openNew() error {
+	err := os.MkdirAll(w.baseDir, 0755)
+	if err != nil {
+		return err
+	}
+
+	name := w.baseDir + "/" + w.currentFileName
+	mode := os.FileMode(0600)
+	info, err := osStat(name)
+	if err == nil {
+		mode = info.Mode()
+		newName := backUpName(name)
+		if err := os.Rename(name, newName); err != nil {
+			return err
+		}
+		if err := chown(name, info); err != nil {
+			return err
+		}
+	}
+
+	fp, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	openFileTime := time.Now()
+
+	w.fp = fp
+	w.openCurrentFileTime = &openFileTime
+	w.isFileFull = false
+	w.lastCheckIsFullAt = 0
+	w.currentFileName = filepath.Base(name)
+	return nil
+}
+
+func backUpName(name string) string {
+	dir := filepath.Dir(name)
+	fileName := filepath.Base(name)
+	ext := filepath.Ext(fileName)
+	prefix := fileName[:len(fileName)-len(ext)]
+	timestamp := currentTime().Format(backupTimeFormat)
+	return filepath.Join(dir, fmt.Sprintf("%s_%s%s", prefix, timestamp, ext))
+}
+
 func (w *FileLoggerWriter) tryOpenNewFile() error {
 	var err error
 	fileName, ok := w.checkTimeToOpenNewFile(w.openCurrentFileTime, w.openCurrentFileTime == nil)
@@ -84,7 +155,7 @@ func (w *FileLoggerWriter) tryOpenNewFile() error {
 	}
 
 	if w.fp == nil {
-		if _, err = os.Stat(w.baseDir); err != nil {
+		if _, err = osStat(w.baseDir); err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
@@ -157,8 +228,9 @@ func (w *FileLoggerWriter) Loop() error {
 		if isFull, err := w.checkFileIsFull(); err != nil {
 			return err
 		} else if isFull {
-			fmt.Printf("log file %s is overflow max size %d bytes.\n", w.currentFileName, w.maxFileSize)
-			return nil
+			if err := w.rotate(); err != nil {
+				return err
+			}
 		}
 
 		bufLen := len(buf)
