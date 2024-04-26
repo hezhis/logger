@@ -3,6 +3,11 @@
 
 package logger
 
+import (
+	"os"
+	"syscall"
+)
+
 const DefaultLogPath = "/var/log/gzjjyz"
 
 var osChown = os.Chown
