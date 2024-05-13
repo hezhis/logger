@@ -17,12 +17,14 @@ import (
 )
 
 type logger struct {
-	name    string // 日志名字
-	level   int    // 日志等级
-	bScreen bool   // 是否打印屏幕
-	path    string // 目录
-	prefix  string // 标识
-	writer  *FileLoggerWriter
+	name        string      // 日志名字
+	level       int         // 日志等级
+	bScreen     bool        // 是否打印屏幕
+	path        string      // 目录
+	prefix      string      // 标识
+	maxFileSize int64       // 文件大小
+	perm        os.FileMode // 文件权限
+	writer      *FileLoggerWriter
 }
 
 type ILogger interface {
@@ -94,8 +96,16 @@ func InitLogger(opts ...Option) ILogger {
 		}
 	}
 
+	if instance.maxFileSize == 0 {
+		instance.maxFileSize = LogFileMaxSize
+	}
+
+	if instance.perm == 0 {
+		instance.perm = fileMode
+	}
+
 	if instance.writer == nil {
-		instance.writer = NewFileLoggerWriter(instance.path, LogFileMaxSize, 5, OpenNewFileByByDateHour, 100000)
+		instance.writer = NewFileLoggerWriter(instance.path, instance.maxFileSize, 5, OpenNewFileByByDateHour, 100000, instance.perm)
 
 		go func() {
 			err := instance.writer.Loop()

@@ -50,9 +50,10 @@ type FileLoggerWriter struct {
 	flushSignCh               chan struct{}
 	flushDoneSignCh           chan error
 	mu                        sync.Mutex
+	perm                      os.FileMode
 }
 
-func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullIntervalSecs int64, checkTimeToOpenNewFile CheckTimeToOpenNewFileFunc, bufChanLen uint32) *FileLoggerWriter {
+func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullIntervalSecs int64, checkTimeToOpenNewFile CheckTimeToOpenNewFileFunc, bufChanLen uint32, perm os.FileMode) *FileLoggerWriter {
 	return &FileLoggerWriter{
 		baseDir:                   strings.TrimRight(baseDir, "/"),
 		maxFileSize:               maxFileSize,
@@ -61,6 +62,7 @@ func NewFileLoggerWriter(baseDir string, maxFileSize int64, checkFileFullInterva
 		bufCh:                     make(chan []byte, bufChanLen),
 		flushSignCh:               make(chan struct{}),
 		flushDoneSignCh:           make(chan error),
+		perm:                      perm,
 	}
 }
 
@@ -101,7 +103,7 @@ func (w *FileLoggerWriter) close() error {
 }
 
 func (w *FileLoggerWriter) openNew() error {
-	err := os.MkdirAll(w.baseDir, 0755)
+	err := os.MkdirAll(w.baseDir, w.perm)
 	if err != nil {
 		return err
 	}
@@ -159,13 +161,13 @@ func (w *FileLoggerWriter) tryOpenNewFile() error {
 			if !os.IsNotExist(err) {
 				return err
 			}
-			if err = os.MkdirAll(w.baseDir, 0755); err != nil {
+			if err = os.MkdirAll(w.baseDir, w.perm); err != nil {
 				return err
 			}
 		}
 	}
 
-	if w.fp, err = os.OpenFile(w.baseDir+"/"+fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755); err != nil {
+	if w.fp, err = os.OpenFile(w.baseDir+"/"+fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, w.perm); err != nil {
 		return err
 	}
 
