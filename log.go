@@ -17,14 +17,15 @@ import (
 )
 
 type logger struct {
-	name        string      // 日志名字
-	level       int         // 日志等级
-	bScreen     bool        // 是否打印屏幕
-	path        string      // 目录
-	prefix      string      // 标识
-	maxFileSize int64       // 文件大小
-	perm        os.FileMode // 文件权限
-	writer      *FileLoggerWriter
+	name           string      // 日志名字
+	level          int         // 日志等级
+	bScreen        bool        // 是否打印屏幕
+	path           string      // 目录
+	prefix         string      // 标识
+	maxFileSize    int64       // 文件大小
+	perm           os.FileMode // 文件权限
+	writer         *FileLoggerWriter
+	goroutineTrace bool
 }
 
 type ILogger interface {
@@ -94,7 +95,9 @@ func InitLogger(opts ...Option) ILogger {
 	defer initMu.Unlock()
 
 	if nil == instance {
-		instance = &logger{}
+		instance = &logger{
+			goroutineTrace: true,
+		}
 	}
 	for _, opt := range opts {
 		opt(instance)
@@ -205,7 +208,13 @@ func buildCallInfo(call *CallInfoSt) string {
 func buildRecord(curLv int, colorInfo, timeInfo, traceInfo, callerInfo, prefix, content string) string {
 	var builder strings.Builder
 
-	header := fmt.Sprintf("%s %s [%s] [trace: %s] ", timeInfo, prefix, callerInfo, traceInfo)
+	var header string
+	if instance.goroutineTrace {
+		header = fmt.Sprintf("%s %s [%s] [trace: %s] ", timeInfo, prefix, callerInfo, traceInfo)
+	} else {
+		header = fmt.Sprintf("%s %s [%s] ", timeInfo, prefix, callerInfo)
+	}
+
 	builder.WriteString(fmt.Sprintf(colorInfo, header))
 
 	builder.WriteString(content)
@@ -217,53 +226,6 @@ func buildRecord(curLv int, colorInfo, timeInfo, traceInfo, callerInfo, prefix, 
 	builder.WriteString("\n")
 	return builder.String()
 }
-
-/* func doWrite(callSkip int, curLv int, colorInfo, format string, v ...interface{}) {
-	if curLv < instance.level {
-		return
-	}
-	var builder strings.Builder
-
-	file, funcName, line := GetCallInfo(callSkip)
-
-	traceId := "UNKNOWN"
-	if id, _ := trace.Ctx.GetCurGTrace(goid.Get()); id != "" {
-		traceId = id
-	}
-	detail := fmt.Sprintf("%s [%s:%d %s] ", time.Now().Format("01-02 15:04:05.9999"), file, line, funcName)
-	detail = fmt.Sprintf(colorInfo, detail)
-	builder.WriteString(detail)
-
-	builder.WriteString(fmt.Sprintf("[trace:%s, prefix:%s] ", traceId, instance.prefix))
-
-	content := fmt.Sprintf(format, v...)
-	// protect disk
-	if size := utf8.RuneCountInString(content); size > 10000 {
-		content = "..." + string([]rune(content)[size-10000:])
-	}
-	builder.WriteString(content)
-
-	if curLv >= StackLevel {
-		buf := make([]byte, 4096)
-		l := runtime.Stack(buf, true)
-		builder.WriteString("\n")
-		builder.WriteString(string(buf[:l]))
-	}
-
-	if curLv == FatalLevel {
-		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-		tf := time.Now()
-		os.WriteFile(fmt.Sprintf("%s/core-%s.%02d%02d-%02d%02d%02d.panic", dir, instance.name, tf.Month(), tf.Day(), tf.Hour(), tf.Minute(), tf.Second()), []byte(builder.String()), fileMode)
-
-		panic(builder.String())
-	}
-	builder.WriteString("\n")
-	writer.Write(builder.String())
-
-	if instance.bScreen {
-		fmt.Printf("%s%s\n", detail, content)
-	}
-} */
 
 // LogTrace 跟踪类型日志
 func LogTrace(format string, v ...interface{}) {
