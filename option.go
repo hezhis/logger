@@ -48,6 +48,6 @@ func WithFileMaxSize(size int64) Option {
 
 func WithoutGroutineTrace() Option {
 	return func(log *logger) {
-		log.groutineTrace = false
+		log.goroutineTrace = false
 	}
 }
