@@ -75,6 +75,20 @@ func GetLevel() int {
 	return instance.level
 }
 
+// SetMaxSize 设置日志切割大小
+func SetMaxSize(l int64) {
+	if nil != instance {
+		instance.maxFileSize = l
+	}
+}
+
+// SetPerm 设置日志权限
+func SetPerm(l os.FileMode) {
+	if nil != instance {
+		instance.perm = l
+	}
+}
+
 func InitLogger(opts ...Option) ILogger {
 	initMu.Lock()
 	defer initMu.Unlock()
