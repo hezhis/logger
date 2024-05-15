@@ -183,8 +183,8 @@ func buildTraceInfo() string {
 func buildContent(format string, v ...interface{}) string {
 	content := fmt.Sprintf(format, v...)
 	// protect disk
-	if size := utf8.RuneCountInString(content); size > 10000 {
-		content = "..." + string([]rune(content)[size-10000:])
+	if size := utf8.RuneCountInString(content); size > 20000 {
+		content = string([]rune(content)[:2000]) + "..."
 	}
 	return content
 }
