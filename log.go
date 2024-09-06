@@ -39,9 +39,10 @@ type ILogger interface {
 }
 
 var (
-	instance *logger
-	initMu   sync.Mutex
-	baseSkip = 3 //跳过等级
+	instance          *logger
+	initMu            sync.Mutex
+	baseSkip          = 3  //跳过等级
+	globalSkipPkgPath bool // 跳过包路径 方法
 )
 
 type CallInfoSt struct {
@@ -159,6 +160,11 @@ func GetCallInfo(skip int) *CallInfoSt {
 		callFuncName = runtime.FuncForPC(pc).Name()
 	}
 	filePath, fileFunc := getPackageName(callFuncName)
+
+	if globalSkipPkgPath {
+		fileFunc = ""
+		filePath = path.Base(filePath)
+	}
 
 	return &CallInfoSt{
 		File:     path.Join(filePath, path.Base(callFile)),
@@ -541,4 +547,8 @@ func (l *logger) LogTrace(format string, v ...interface{}) {
 
 func (l *logger) Flush() {
 	l.writer.Flush()
+}
+
+func SetGlobalSkipFilePath() {
+	globalSkipPkgPath = true
 }
