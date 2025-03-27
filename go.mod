@@ -1,3 +1,3 @@
-module github.com/gzjjyz/logger
+module github.com/hezhis/logger
 
 go 1.17
